@@ -1,0 +1,20 @@
+[project]
+name = "qterbot"
+version = "0.1.0"
+description = "A discord bot that answers questions about the Qter project using AI"
+authors = [
+    {name = "Henry Rovnyak",email = "h.rovnyak@proton.me"}
+]
+requires-python = ">=3.14"
+dependencies = [
+    "qdrant-client (>=1.19.0,<2.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
