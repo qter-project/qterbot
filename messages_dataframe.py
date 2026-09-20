@@ -1,9 +1,15 @@
 """Load cached DiscordChatExporter tar archives into Polars dataframes.
 
 The archive directory contains a ``media`` directory, numbered ``.tar.gz``
-exports, and optional per-frame Parquet caches.  ``load_dataframes`` loads
-all of the data into dataframes while caching the processed data in the parquet
-files for faster future access.
+exports, and optional per-frame Parquet caches.  A cache named
+``N-messages.parquet``, ``N-users.parquet``, or ``N-channels.parquet`` holds
+that one dataframe after processing exports 0 through N.  On each call,
+``load_dataframes`` independently selects the newest readable cache for each
+frame, processes only later tarballs for that frame, and writes all three
+updated caches at the newest export index.  Caches are written to unique
+temporary files and atomically published with ``os.replace`` so readers never
+observe a partially written Parquet file.  ``full_real_name`` is deliberately
+not cached; it is derived from the current name-mappings file every call.
 """
 
 from __future__ import annotations
