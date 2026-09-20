@@ -27,7 +27,11 @@ def _export(
                 "id": message_id,
                 "content": content,
                 "timestamp": "2025-01-01T00:00:00+00:00",
-                "author": {"id": "user-1", "name": username, "nickname": username},
+                "author": {
+                    "id": "user-1",
+                    "name": username,
+                    "nickname": username,
+                },
             }
         ],
     }
@@ -39,16 +43,24 @@ def archive_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _write_tarball(archive_dir: Path, name: str, members: dict[str, object]) -> None:
+def _write_tarball(
+    archive_dir: Path, name: str, members: dict[str, object]
+) -> None:
     with tarfile.open(archive_dir / name, "w:gz") as archive:
         for member_name, member in members.items():
-            payload = json.dumps(member).encode() if isinstance(member, dict) else member
+            payload = (
+                json.dumps(member).encode()
+                if isinstance(member, dict)
+                else member
+            )
             info = tarfile.TarInfo(member_name)
             info.size = len(payload)
             archive.addfile(info, io.BytesIO(payload))
 
 
-def test_empty_archive_returns_schema_correct_empty_frames(archive_dir: Path) -> None:
+def test_empty_archive_returns_schema_correct_empty_frames(
+    archive_dir: Path,
+) -> None:
     frames = load_dataframes(archive_dir)
 
     assert frames.messages.is_empty()
@@ -57,9 +69,19 @@ def test_empty_archive_returns_schema_correct_empty_frames(archive_dir: Path) ->
     assert list(archive_dir.glob("*.parquet")) == []
 
 
-def test_incremental_cache_deduplicates_and_refreshes_real_names(archive_dir: Path) -> None:
-    _write_tarball(archive_dir, "00-first.tar.gz", {"first.json": _export(content="old", username="old")})
-    _write_tarball(archive_dir, "1-update.tar.gz", {"update.json": _export(content="new", username="new")})
+def test_incremental_cache_deduplicates_and_refreshes_real_names(
+    archive_dir: Path,
+) -> None:
+    _write_tarball(
+        archive_dir,
+        "00-first.tar.gz",
+        {"first.json": _export(content="old", username="old")},
+    )
+    _write_tarball(
+        archive_dir,
+        "1-update.tar.gz",
+        {"update.json": _export(content="new", username="new")},
+    )
     mappings = archive_dir / "names.txt"
     mappings.write_text("new -> New Name\n", encoding="utf-8")
 
@@ -73,7 +95,10 @@ def test_incremental_cache_deduplicates_and_refreshes_real_names(archive_dir: Pa
         "1-users.parquet",
         "1-channels.parquet",
     }
-    assert "full_real_name" not in pl.read_parquet(archive_dir / "1-users.parquet").schema
+    assert (
+        "full_real_name"
+        not in pl.read_parquet(archive_dir / "1-users.parquet").schema
+    )
 
     mappings.write_text("old -> Old Name\n", encoding="utf-8")
     second = load_dataframes(archive_dir, mappings)
@@ -81,9 +106,19 @@ def test_incremental_cache_deduplicates_and_refreshes_real_names(archive_dir: Pa
     assert second.users.item(0, "full_real_name") == "Old Name"
 
 
-def test_stale_message_cache_is_caught_up_independently(archive_dir: Path) -> None:
-    _write_tarball(archive_dir, "0-first.tar.gz", {"first.json": _export(message_id="one")})
-    _write_tarball(archive_dir, "1-second.tar.gz", {"second.json": _export(message_id="two")})
+def test_stale_message_cache_is_caught_up_independently(
+    archive_dir: Path,
+) -> None:
+    _write_tarball(
+        archive_dir,
+        "0-first.tar.gz",
+        {"first.json": _export(message_id="one")},
+    )
+    _write_tarball(
+        archive_dir,
+        "1-second.tar.gz",
+        {"second.json": _export(message_id="two")},
+    )
     load_dataframes(archive_dir)
 
     pl.read_parquet(archive_dir / "1-messages.parquet").head(1).write_parquet(
@@ -93,14 +128,19 @@ def test_stale_message_cache_is_caught_up_independently(archive_dir: Path) -> No
 
     frames = load_dataframes(archive_dir)
 
-    assert frames.messages.get_column("message_id").sort().to_list() == ["one", "two"]
+    assert frames.messages.get_column("message_id").sort().to_list() == [
+        "one",
+        "two",
+    ]
     assert (archive_dir / "1-messages.parquet").is_file()
 
 
 def test_corrupt_cache_is_rebuilt_from_exports(archive_dir: Path) -> None:
     _write_tarball(archive_dir, "0-first.tar.gz", {"first.json": _export()})
     load_dataframes(archive_dir)
-    (archive_dir / "0-messages.parquet").write_text("not parquet", encoding="utf-8")
+    (archive_dir / "0-messages.parquet").write_text(
+        "not parquet", encoding="utf-8"
+    )
 
     frames = load_dataframes(archive_dir)
 
@@ -113,10 +153,16 @@ def test_corrupt_cache_is_rebuilt_from_exports(archive_dir: Path) -> None:
     [
         ({"1-later.tar.gz": {"later.json": _export()}}, "missing indices"),
         (
-            {"0-first.tar.gz": {"first.json": _export()}, "00-duplicate.tar.gz": {"duplicate.json": _export()}},
+            {
+                "0-first.tar.gz": {"first.json": _export()},
+                "00-duplicate.tar.gz": {"duplicate.json": _export()},
+            },
             "multiple exports use index 0",
         ),
-        ({"0-first.tar.gz": {"not-json.txt": b"not json"}}, "non-JSON tar member"),
+        (
+            {"0-first.tar.gz": {"not-json.txt": b"not json"}},
+            "non-JSON tar member",
+        ),
     ],
 )
 def test_invalid_archive_structure_fails(
