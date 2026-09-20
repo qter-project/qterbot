@@ -1,5 +1,8 @@
 .direnv
 node_modules
+.ipynb_checkpoints
+.virtual_documents
+__pycache__
 
 # Devenv
 .devenv*
@@ -15,3 +18,10 @@ devenv.local.yaml
 # qdrant
 storage
 .qdrant-initialized
+
+# qter media
+media
+qter-channels
+
+# secrets
+username-real-names.txt
