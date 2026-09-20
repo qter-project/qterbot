@@ -1,9 +1,9 @@
 """Load cached DiscordChatExporter tar archives into Polars dataframes.
 
 The archive directory contains a ``media`` directory, numbered ``.tar.gz``
-exports, and optional per-frame Parquet caches.  ``load_dataframes`` keeps
-the public API used by the notebooks while incrementally updating those
-caches.
+exports, and optional per-frame Parquet caches.  ``load_dataframes`` loads
+all of the data into dataframes while caching the processed data in the parquet
+files for faster future access.
 """
 
 from __future__ import annotations
@@ -323,8 +323,16 @@ def _merge_users(cached: pl.DataFrame, fresh: pl.DataFrame) -> pl.DataFrame:
         .lazy()
         .group_by("user_id", maintain_order=True)
         .agg(
-            pl.col("usernames").explode().drop_nulls().unique(maintain_order=True).alias("usernames"),
-            pl.col("nicknames").explode().drop_nulls().unique(maintain_order=True).alias("nicknames"),
+            pl.col("usernames")
+            .explode(empty_as_null=True)
+            .drop_nulls()
+            .unique(maintain_order=True)
+            .alias("usernames"),
+            pl.col("nicknames")
+            .explode(empty_as_null=True)
+            .drop_nulls()
+            .unique(maintain_order=True)
+            .alias("nicknames"),
         )
         .select(*USER_CACHE_SCHEMA)
         .collect()
