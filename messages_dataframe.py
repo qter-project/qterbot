@@ -100,7 +100,7 @@ def _read_real_name_mappings(path: Path) -> dict[str, str]:
             raise ValueError(
                 f"{path}:{line_number}: username and full real name are both required"
             )
-        mappings.setdefault(username.casefold(), full_name)
+        mappings.setdefault(username, full_name)
     return mappings
 
 
@@ -143,7 +143,7 @@ def _archive_snapshot(archive_dir: Path) -> _ArchiveSnapshot:
             frame = cache_match["frame"]
             if index in caches[frame]:
                 raise ValueError(
-                    f"multiple {frame} cache files use index {index}: "
+                    f"multiple {frame} cache files use index {index} (should be impossible since they would share the same name): "
                     f"{caches[frame][index]}, {path}"
                 )
             caches[frame][index] = path
@@ -241,7 +241,7 @@ def _exports_from_tarball(
 def _frames_from_exports(
     exports: Iterable[tuple[str, dict[str, Any]]],
 ) -> ArchiveDataFrames:
-    """Adapt the original JSON-export parser for an iterable of tar members."""
+    """Parse JSON exports"""
     message_rows: list[dict[str, Any]] = []
     user_rows: list[dict[str, str | None]] = []
     channel_rows: list[dict[str, str | None]] = []
@@ -424,9 +424,9 @@ def _with_real_names(
     full_names = [
         next(
             (
-                mappings[username.casefold()]
+                mappings[username]
                 for username in usernames
-                if username.casefold() in mappings
+                if username in mappings
             ),
             None,
         )
@@ -523,6 +523,7 @@ def load_dataframes(
     records = _new_export_records(
         snapshot, min(message_index, user_index, channel_index)
     )
+
     fresh_messages = _frames_from_exports(
         _records_after(records, message_index)
     ).messages
@@ -532,13 +533,16 @@ def load_dataframes(
     fresh_channels = _frames_from_exports(
         _records_after(records, channel_index)
     ).channels
-    cache_index = max(snapshot.exports)
+
     cached_frames = ArchiveDataFrames(
         messages=_merge_messages(cached_messages, fresh_messages),
         users=_merge_users(cached_users, fresh_users),
         channels=_merge_channels(cached_channels, fresh_channels),
     )
+
+    cache_index = max(snapshot.exports)
     _write_caches(archive_dir, cache_index, cached_frames, snapshot.caches)
+
     return ArchiveDataFrames(
         messages=cached_frames.messages,
         users=_with_real_names(cached_frames.users, mappings),
