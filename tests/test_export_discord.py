@@ -41,7 +41,9 @@ def export_path(tmp_path: Path) -> Path:
 
 
 def _fake_run_factory(
-    failing_channel: str | None = None, forbidden_channel: str | None = None
+    failing_channel: str | None = None,
+    forbidden_channel: str | None = None,
+    forum_channel: str | None = None,
 ):
     commands: list[list[str]] = []
 
@@ -64,12 +66,15 @@ def _fake_run_factory(
         )
         return subprocess.CompletedProcess(
             command,
-            1 if channel_id in {failing_channel, forbidden_channel} else 0,
+            1 if channel_id in {failing_channel, forbidden_channel, forum_channel} else 0,
             stdout="",
             stderr=(
                 f"DiscordChatExporter.Core.Exceptions.DiscordChatExporterException: "
                 f"Request to 'channels/{channel_id}' failed: forbidden."
                 if channel_id == forbidden_channel
+                else "🟡circles: Channel '🟡circles' of guild 'Purdue Hackers .߆' is a forum "
+                "and cannot be exported directly. You need to pull its threads and export them individually."
+                if channel_id == forum_channel
                 else "export failed" if channel_id == failing_channel else ""
             ),
         )
@@ -150,3 +155,17 @@ def test_export_guild_skips_forbidden_channels(
     output = capsys.readouterr().out
     assert "Skipping channel 2: permission denied (1/2 channels exported; 1 skipped for permissions)" in output
     assert "Export complete: 1 channels exported, 1 skipped for permissions (2 channels listed)" in output
+
+
+def test_export_guild_skips_forum_parent_channels(
+    export_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_run, _ = _fake_run_factory(forum_channel="2")
+    monkeypatch.setattr(export_discord, "load_dataframes", lambda _: _frames())
+    monkeypatch.setattr(export_discord.subprocess, "run", fake_run)
+
+    archive_path = export_discord.export_guild(export_path, "guild-1", "secret", "forum")
+
+    with tarfile.open(archive_path) as archive:
+        assert archive.getnames() == ["1/1.json"]
+    assert "Skipping channel 2: forum parent channel" in capsys.readouterr().out

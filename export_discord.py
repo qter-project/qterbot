@@ -30,6 +30,10 @@ from messages_dataframe import ArchiveDataFrames, load_dataframes
 EXPORT_NAME = re.compile(r"^(?P<index>\d+)(?:-.*)?\.tar\.gz$")
 CHANNEL_LINE = re.compile(r"^\s*(?:\*\s*)?(?P<channel_id>\d+)\s+\|\s")
 FORBIDDEN_CHANNEL = re.compile(r"Request to 'channels/\d+' failed: forbidden\.", re.IGNORECASE)
+FORUM_PARENT_CHANNEL = re.compile(
+    r"is a forum and cannot be exported directly\.\s*You need to pull its threads",
+    re.IGNORECASE,
+)
 
 
 class ExportError(RuntimeError):
@@ -134,6 +138,10 @@ def _is_forbidden_channel_error(error_output: str) -> bool:
     return bool(FORBIDDEN_CHANNEL.search(error_output))
 
 
+def _is_skippable_channel_error(error_output: str) -> bool:
+    return _is_forbidden_channel_error(error_output) or bool(FORUM_PARENT_CHANNEL.search(error_output))
+
+
 def _progress(exported: int, total: int, skipped: int) -> str:
     return f"({exported}/{total} channels exported; {skipped} skipped for permissions)"
 
@@ -221,10 +229,15 @@ def export_guild(
                     sys.stderr.write(result.stderr)
                 if result.returncode:
                     shutil.rmtree(channel_directory)
-                    if _is_forbidden_channel_error(result.stderr or ""):
+                    if _is_skippable_channel_error(result.stderr or ""):
                         skipped_channel_ids.append(channel_id)
+                        reason = (
+                            "forum parent channel"
+                            if FORUM_PARENT_CHANNEL.search(result.stderr or "")
+                            else "permission denied"
+                        )
                         print(
-                            f"Skipping channel {channel_id}: permission denied "
+                            f"Skipping channel {channel_id}: {reason} "
                             f"{_progress(len(successful_channel_ids), total, len(skipped_channel_ids))}"
                         )
                         continue
